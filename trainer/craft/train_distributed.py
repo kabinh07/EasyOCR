@@ -71,7 +71,7 @@ class Trainer(object):
             gauss_init_size=self.config.train.data.gauss_init_size,
             gauss_sigma=self.config.train.data.gauss_sigma,
             enlarge_region=self.config.train.data.enlarge_region,
-            enlarge_affinity=self.config.train.data.enlarge_affinity,
+            enlarge_=self.config.train.data.enlarge_affinity,
             watershed_param=self.config.train.data.watershed,
             aug=self.config.train.data.custom_aug,
             vis_test_dir=self.config.vis_test_dir,

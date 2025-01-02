@@ -367,14 +367,19 @@ class CustomDataset(CraftBaseDataset):
     def update_device(self, gpu):
         self.gpu = gpu
 
-    def load_img_gt_box(self, img_gt_box_path):
+    def load_img_gt_box(self, img_gt_box_path, img_scales):
         lines = open(img_gt_box_path, encoding="utf-8").readlines()
         word_bboxes = []
         words = []
         for line in lines:
             box_info = line.strip().encode("utf-8").decode("utf-8-sig").split(",")
             box_points = [int(box_info[i]) for i in range(8)]
-            box_points = np.array(box_points, np.float32).reshape(4, 2)
+            box_points = np.array(box_points, np.float32)
+            # print(box_points)
+            # box_points[0::2] = box_points[0::2] * img_scales[0]
+            # box_points[1::2] = box_points[1::2] * img_scales[1]
+            # print(box_points)
+            box_points = box_points.reshape(4, 2)
             word = box_info[8:]
             word = ",".join(word)
             if word in self.do_not_care_label:
@@ -390,12 +395,16 @@ class CustomDataset(CraftBaseDataset):
         img_path = os.path.join(self.img_dir, img_name)
         image = cv2.imread(img_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        img_w, img_h, _ = image.shape 
+        img_scales = (768 / img_w, 768 / img_h)
+        # image = cv2.resize(image, (768, 768))
 
         img_gt_box_path = os.path.join(
             self.img_gt_box_dir, "gt_%s.txt" % os.path.splitext(img_name)[0]
         )
         word_bboxes, words = self.load_img_gt_box(
-            img_gt_box_path
+            img_gt_box_path,
+            img_scales
         )  # shape : (Number of word bbox, 4, 2)
         confidence_mask = np.ones((image.shape[0], image.shape[1]), np.float32)
 

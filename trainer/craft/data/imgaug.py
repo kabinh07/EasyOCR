@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from PIL import Image
 from torchvision.transforms.functional import resized_crop, crop
-from torchvision.transforms import RandomResizedCrop, RandomCrop
+from torchvision.transforms import RandomResizedCrop, RandomCrop, Resize
 from torchvision.transforms import InterpolationMode
 
 
@@ -71,46 +71,58 @@ def random_resize_crop(
     affinity_score = Image.fromarray(affinity_score)
     confidence_mask = Image.fromarray(confidence_mask)
 
-    if pre_crop_area != None:
-        i, j, h, w = pre_crop_area
+    image = Resize((size, size), interpolation=InterpolationMode.BICUBIC)(image)
+    region_score = Resize((size, size), interpolation=InterpolationMode.BICUBIC)(region_score)
+    affinity_score = Resize((size, size), interpolation=InterpolationMode.BICUBIC)(affinity_score)
+    confidence_mask = Resize((size, size), interpolation=InterpolationMode.BICUBIC)(confidence_mask)
 
-    else:
-        if random.random() < threshold:
-            i, j, h, w = RandomResizedCrop.get_params(image, scale=scale, ratio=ratio)
-        else:
-            i, j, h, w = RandomResizedCrop.get_params(
-                image, scale=(1.0, 1.0), ratio=(1.0, 1.0)
-            )
 
-    image = resized_crop(
-        image, i, j, h, w, size=(size, size), interpolation=InterpolationMode.BICUBIC
-    )
-    region_score = resized_crop(
-        region_score, i, j, h, w, (size, size), interpolation=InterpolationMode.BICUBIC
-    )
-    affinity_score = resized_crop(
-        affinity_score,
-        i,
-        j,
-        h,
-        w,
-        (size, size),
-        interpolation=InterpolationMode.BICUBIC,
-    )
-    confidence_mask = resized_crop(
-        confidence_mask,
-        i,
-        j,
-        h,
-        w,
-        (size, size),
-        interpolation=InterpolationMode.NEAREST,
-    )
+    # if pre_crop_area != None:
+    #     i, j, h, w = pre_crop_area
+
+    # else:
+    #     if random.random() < threshold:
+    #         i, j, h, w = Resize.get_params(image, scale=scale, ratio=ratio)
+    #     else:
+    #         i, j, h, w = RandomResizedCrop.get_params(
+    #             image, scale=(1.0, 1.0), ratio=(1.0, 1.0)
+    #         )
+
+    # image = resized_crop(
+    #     image, i, j, h, w, size=(size, size), interpolation=InterpolationMode.BICUBIC
+    # )
+    # region_score = resized_crop(
+    #     region_score, i, j, h, w, (size, size), interpolation=InterpolationMode.BICUBIC
+    # )
+    # affinity_score = resized_crop(
+    #     affinity_score,
+    #     i,
+    #     j,
+    #     h,
+    #     w,
+    #     (size, size),
+    #     interpolation=InterpolationMode.BICUBIC,
+    # )
+    # confidence_mask = resized_crop(
+    #     confidence_mask,
+    #     i,
+    #     j,
+    #     h,
+    #     w,
+    #     (size, size),
+    #     interpolation=InterpolationMode.NEAREST,
+    # )
 
     image = np.array(image)
     region_score = np.array(region_score)
     affinity_score = np.array(affinity_score)
     confidence_mask = np.array(confidence_mask)
+
+    # print(f"Printing from aug: {image.shape}")
+    # print(f"Printing from aug: {region_score.shape}")
+    # print(f"Printing from aug: {affinity_score.shape}")
+    # print(f"Printing from aug: {confidence_mask.shape}")
+
     augment_targets = [image, region_score, affinity_score, confidence_mask]
 
     return augment_targets

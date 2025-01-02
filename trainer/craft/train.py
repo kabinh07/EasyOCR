@@ -20,6 +20,8 @@ from eval import main_eval
 from metrics.eval_det_iou import DetectionIoUEvaluator
 from utils.util import copyStateDict, save_parser
 
+from PIL import Image, ImageDraw
+
 
 class Trainer(object):
     def __init__(self, config, gpu, mode):
@@ -151,7 +153,7 @@ class Trainer(object):
             if self.config.train.ckpt_path is not None:
                 supervision_param = self.get_load_param(supervision_device)
                 supervision_model.load_state_dict(
-                    copyStateDict(supervision_param["craft"])
+                    copyStateDict(supervision_param)
                 )
                 supervision_model = supervision_model.to(f"cuda:{supervision_device}")
             print(f"Supervision model loading on : gpu {supervision_device}")
@@ -165,7 +167,7 @@ class Trainer(object):
             raise Exception("Undefined architecture")
 
         if self.config.train.ckpt_path is not None:
-            craft.load_state_dict(copyStateDict(self.net_param["craft"]))
+            craft.load_state_dict(copyStateDict(self.net_param))
 
         craft = craft.cuda()
         craft = torch.nn.DataParallel(craft)
@@ -260,6 +262,28 @@ class Trainer(object):
                 affinity_scores = affinity_scores.cuda(non_blocking=True)
                 confidence_masks = confidence_masks.cuda(non_blocking=True)
 
+                # print(f"img: {images.shape}")
+                # print(f"reg: {region_scores.shape}")
+                # print(f"aff: {affinity_scores.shape}")
+                # print(f"img[0]: {images[0].shape}")
+
+                # reg_min = region_scores.min()
+                # reg_max = region_scores.max()
+                # aff_min = affinity_scores.min()
+                # aff_max = affinity_scores.max()
+                # norm_reg = (region_scores - reg_min) / (reg_max - reg_min)
+                # norm_aff = (affinity_scores - aff_min) / (aff_max - aff_min)
+                # count = 0
+                # for image_, norm_aff_, norm_reg_ in zip(images, norm_aff, norm_reg):
+                #     img = image_.permute(1,2,0).cpu().numpy().astype(np.uint8)
+                #     img = Image.fromarray(img)
+                #     img_1 = Image.fromarray(norm_reg_.cpu().numpy(), mode = "L")
+                #     img_2 = Image.fromarray(norm_aff_.cpu().numpy(), mode = "L")
+                #     img.save(f'/home/EasyOCR/example_data/test_{train_step}_{count}.jpg')
+                #     img_1.save(f'/home/EasyOCR/example_data/test_{train_step}_{count}_1.jpg')
+                #     img_2.save(f'/home/EasyOCR/example_data/test_{train_step}_{count}_2.jpg')
+                #     count += 1
+
                 if self.config.train.use_synthtext:
                     # Synth image load
                     syn_image, syn_region_label, syn_affi_label, syn_confidence_mask = next(
@@ -290,6 +314,9 @@ class Trainer(object):
                         output, _ = craft(images)
                         out1 = output[:, :, :, 0]
                         out2 = output[:, :, :, 1]
+
+                        # print(f"out1 shape: {out1.shape}")
+                        # print(f"out2 shape: {out2.shape}")
 
                         loss = criterion(
                             region_image_label,
