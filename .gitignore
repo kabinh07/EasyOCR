@@ -107,3 +107,6 @@ ENV/
 .vscode/
 .vs/
 .idea/
+trainer/craft/data_root_dir/*
+!trainer/craft/data_root_dir/folder.txt
+trainer/craft/exp/*
