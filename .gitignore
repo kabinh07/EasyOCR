@@ -111,3 +111,6 @@ trainer/craft/data_root_dir/*
 !trainer/craft/data_root_dir/folder.txt
 trainer/craft/exp/*
 trainer/craft/pretrained_model/*
+*.jpg
+*.jpeg
+*.png
