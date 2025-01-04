@@ -74,9 +74,11 @@ def test_net(canvas_size, mag_ratio, net, image, text_threshold, link_threshold,
 def get_detector(trained_model, device='cpu', quantize=True, cudnn_benchmark=False):
     net = CRAFT()
 
+    trained_model = '/home/EasyOCR/trainer/craft/exp/custom_data_train/CRAFT_clr_amp_500.pth'
+
     if device == 'cpu':
         print(f"Loading state dict from: {trained_model}")
-        net.load_state_dict(copyStateDict(torch.load(trained_model, map_location=device, weights_only=False))["craft"])
+        net.load_state_dict(copyStateDict(torch.load(trained_model, map_location=device, weights_only=False)))
         if quantize:
             try:
                 torch.quantization.quantize_dynamic(net, dtype=torch.qint8, inplace=True)
@@ -84,7 +86,7 @@ def get_detector(trained_model, device='cpu', quantize=True, cudnn_benchmark=Fal
                 pass
     else:
         print(f"Loading state dict from: {trained_model}")
-        net.load_state_dict(copyStateDict(torch.load(trained_model, map_location=device, weights_only=False)["craft"]))
+        net.load_state_dict(copyStateDict(torch.load(trained_model, map_location=device, weights_only=False)))
         net = torch.nn.DataParallel(net).to(device)
         cudnn.benchmark = cudnn_benchmark
 

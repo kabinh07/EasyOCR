@@ -246,29 +246,30 @@ class Reader(object):
                 raise RuntimeError("Unsupport detector network. Support networks are craft and dbnet18.")
             self.get_textbox = get_textbox
             self.get_detector = get_detector
-        #     corrupt_msg = 'MD5 hash mismatch, possible file corruption'
-        #     detector_path = os.path.join(self.model_storage_directory, self.detection_models[self.detect_network]['filename'])
-        #     if os.path.isfile(detector_path) == False:
-        #         if not self.download_enabled:
-        #             raise FileNotFoundError("Missing %s and downloads disabled" % detector_path)
-        #         LOGGER.warning('Downloading detection model, please wait. '
-        #                        'This may take several minutes depending upon your network connection.')
-        #         download_and_unzip(self.detection_models[self.detect_network]['url'], self.detection_models[self.detect_network]['filename'], self.model_storage_directory, self.verbose)
-        #         assert calculate_md5(detector_path) == self.detection_models[self.detect_network]['md5sum'], corrupt_msg
-        #         LOGGER.info('Download complete')
-        #     # elif calculate_md5(detector_path) != self.detection_models[self.detect_network]['md5sum']:
-        #     #     if not self.download_enabled:
-        #     #         raise FileNotFoundError("MD5 mismatch for %s and downloads disabled" % detector_path)
-        #     #     LOGGER.warning(corrupt_msg)
-        #     #     os.remove(detector_path)
-        #     #     LOGGER.warning('Re-downloading the detection model, please wait. '
-        #     #                    'This may take several minutes depending upon your network connection.')
-        #     #     download_and_unzip(self.detection_models[self.detect_network]['url'], self.detection_models[self.detect_network]['filename'], self.model_storage_directory, self.verbose)
-        #     #     assert calculate_md5(detector_path) == self.detection_models[self.detect_network]['md5sum'], corrupt_msg
-        # else:
-        #     raise RuntimeError("Unsupport detector network. Support networks are {}.".format(', '.join(self.support_detection_network)))
+            corrupt_msg = 'MD5 hash mismatch, possible file corruption'
+            detector_path = os.path.join(self.model_storage_directory, self.detection_models[self.detect_network]['filename'])
+            if os.path.isfile(detector_path) == False:
+                if not self.download_enabled:
+                    raise FileNotFoundError("Missing %s and downloads disabled" % detector_path)
+                LOGGER.warning('Downloading detection model, please wait. '
+                               'This may take several minutes depending upon your network connection.')
+                download_and_unzip(self.detection_models[self.detect_network]['url'], self.detection_models[self.detect_network]['filename'], self.model_storage_directory, self.verbose)
+                assert calculate_md5(detector_path) == self.detection_models[self.detect_network]['md5sum'], corrupt_msg
+                LOGGER.info('Download complete')
+            elif calculate_md5(detector_path) != self.detection_models[self.detect_network]['md5sum']:
+                if not self.download_enabled:
+                    raise FileNotFoundError("MD5 mismatch for %s and downloads disabled" % detector_path)
+                LOGGER.warning(corrupt_msg)
+                os.remove(detector_path)
+                LOGGER.warning('Re-downloading the detection model, please wait. '
+                               'This may take several minutes depending upon your network connection.')
+                download_and_unzip(self.detection_models[self.detect_network]['url'], self.detection_models[self.detect_network]['filename'], self.model_storage_directory, self.verbose)
+                assert calculate_md5(detector_path) == self.detection_models[self.detect_network]['md5sum'], corrupt_msg
+        else:
+            raise RuntimeError("Unsupport detector network. Support networks are {}.".format(', '.join(self.support_detection_network)))
         
-        return "/home/EasyOCR/trainer/craft/exp/custom_data_train/CRAFT_clr_amp_1400.pth"
+        return detector_path
+        # return "/home/EasyOCR/trainer/craft/exp/custom_data_train/craft_test.pth"
 
     def initDetector(self, detector_path):
         return self.get_detector(detector_path, 

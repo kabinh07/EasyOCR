@@ -14,15 +14,15 @@ train:
   synth_data_dir: "/data/SynthText/"
   synth_ratio: 5
   real_dataset: custom
-  ckpt_path: "./pretrained_model/craft_mlt_25k.pth"
-  eval_interval: 1000
+  ckpt_path: "./pretrained_model/CRAFT_clr_amp_29500.pth"
+  eval_interval: 500
   batch_size: 5
   st_iter: 0
   end_iter: 25000
   lr: 0.00001
   lr_decay: 7500
   gamma: 0.2
-  weight_decay: 0.0001
+  weight_decay: 0.00001
   num_workers: 0 # On single gpu, train.py execution only works when num worker = 0 / On multi-gpu, you can set num_worker > 0 to speed up
   amp: True
   loss: 3

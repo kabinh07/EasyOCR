@@ -153,7 +153,7 @@ class Trainer(object):
             if self.config.train.ckpt_path is not None:
                 supervision_param = self.get_load_param(supervision_device)
                 supervision_model.load_state_dict(
-                    copyStateDict(supervision_param)
+                    copyStateDict(supervision_param['craft'])
                 )
                 supervision_model = supervision_model.to(f"cuda:{supervision_device}")
             print(f"Supervision model loading on : gpu {supervision_device}")
@@ -167,7 +167,7 @@ class Trainer(object):
             raise Exception("Undefined architecture")
 
         if self.config.train.ckpt_path is not None:
-            craft.load_state_dict(copyStateDict(self.net_param))
+            craft.load_state_dict(copyStateDict(self.net_param['craft']))
 
         craft = craft.cuda()
         craft = torch.nn.DataParallel(craft)
