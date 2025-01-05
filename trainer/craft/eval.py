@@ -76,6 +76,8 @@ def save_result_2015(img_file, img, pre_output, pre_box, gt_box, result_dir):
     # make result file list
     filename, file_ext = os.path.splitext(os.path.basename(img_file))
 
+    # print(f"printing from saveresult2015: {filename}")
+
     for i, box in enumerate(pre_box):
         poly = np.array(box).astype(np.int32).reshape((-1))
         poly = poly.reshape(-1, 2)
@@ -226,6 +228,8 @@ def viz_test(img, pre_output, pre_box, gt_box, img_name, result_dir, test_folder
 
 def main_eval(model_path, backbone, config, evaluator, result_dir, buffer, model, mode):
 
+    # print(f"Priniting from evaluation method: {model}")
+
     if not os.path.exists(result_dir):
         os.makedirs(result_dir, exist_ok=True)
 
@@ -297,6 +301,7 @@ def main_eval(model_path, backbone, config, evaluator, result_dir, buffer, model
         for box in bboxes:
             box_info = {"points": box, "text": "###", "ignore": False}
             single_img_bbox.append(box_info)
+            # print(f"printing from training evaluation loop: {box_info}")
         total_imgs_bboxes_pre.append(single_img_bbox)
         # Distributed evaluation -------------------------------------------------------------------------------------#
         if buffer is not None:
@@ -323,6 +328,7 @@ def main_eval(model_path, backbone, config, evaluator, result_dir, buffer, model
         total_imgs_bboxes_pre = buffer
 
     results = []
+    # print(f"printing from eval.py 331: first elements: {total_imgs_bboxes_gt[0], total_imgs_bboxes_pre[0]}")
     for i, (gt, pred) in enumerate(zip(total_imgs_bboxes_gt, total_imgs_bboxes_pre)):
         perSampleMetrics_dict = evaluator.evaluate_image(gt, pred)
         results.append(perSampleMetrics_dict)
@@ -372,6 +378,7 @@ if __name__ == "__main__":
         wandb.config.update(config)
 
     val_result_dir_name = args.yaml
+    print(f"printing from cal_eval: {args.yaml}")
     cal_eval(
         config,
         "custom_data",

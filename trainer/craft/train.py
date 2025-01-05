@@ -21,11 +21,12 @@ from metrics.eval_det_iou import DetectionIoUEvaluator
 from utils.util import copyStateDict, save_parser
 
 from PIL import Image, ImageDraw
+from torch.utils.tensorboard import SummaryWriter
 
 
 class Trainer(object):
     def __init__(self, config, gpu, mode):
-
+        self.writer = SummaryWriter()
         self.config = config
         self.gpu = gpu
         self.mode = mode
@@ -126,6 +127,7 @@ class Trainer(object):
             model,
             self.mode,
         )
+        self.writer.add_scalar("Evaluation precision", np.round(metrics['recall'], 3), train_step)
         if self.gpu == 0 and self.config.wandb_opt:
             wandb.log(
                 {
@@ -310,6 +312,9 @@ class Trainer(object):
 
                 if self.config.train.amp:
                     with torch.cuda.amp.autocast():
+                        print(f"printing from training loop: ")
+                        for param in craft.parameters():
+                            print(param)
 
                         output, _ = craft(images)
                         out1 = output[:, :, :, 0]
@@ -353,6 +358,8 @@ class Trainer(object):
                 end_time = time.time()
                 loss_value += loss.item()
                 batch_time += end_time - start_time
+
+                self.writer.add_scalar("Training loss", loss_value, train_step)
 
                 if train_step > 0 and train_step % 5 == 0:
                     mean_loss = loss_value / 5
@@ -444,6 +451,7 @@ class Trainer(object):
                     + ".pth"
             )
         torch.save(save_param_dic, save_param_path)
+        self.writer.flush()
 
 
 def main():
@@ -500,6 +508,7 @@ def main():
 
     if config["wandb_opt"]:
         wandb.finish()
+    trainer.writer.close()
 
 
 if __name__ == "__main__":

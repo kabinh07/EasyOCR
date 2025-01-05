@@ -15,10 +15,10 @@ train:
   synth_ratio: 5
   real_dataset: custom
   ckpt_path: "./pretrained_model/CRAFT_clr_amp_29500.pth"
-  eval_interval: 500
+  eval_interval: 2
   batch_size: 5
   st_iter: 0
-  end_iter: 25000
+  end_iter: 10
   lr: 0.00001
   lr_decay: 7500
   gamma: 0.2
@@ -97,4 +97,4 @@ test:
     mag_ratio: 1.75
     poly: False
     cuda: True
-    vis_opt: False
+    vis_opt: True
