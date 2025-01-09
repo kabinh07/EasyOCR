@@ -82,7 +82,7 @@ def random_resize_crop(
 
     # else:
     #     if random.random() < threshold:
-    #         i, j, h, w = Resize.get_params(image, scale=scale, ratio=ratio)
+    #         i, j, h, w = RandomResizedCrop.get_params(image, scale=scale, ratio=ratio)
     #     else:
     #         i, j, h, w = RandomResizedCrop.get_params(
     #             image, scale=(1.0, 1.0), ratio=(1.0, 1.0)

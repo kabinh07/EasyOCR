@@ -30,6 +30,7 @@ class CraftBaseDataset(Dataset):
         self,
         output_size,
         data_dir,
+        data_type,
         saved_gt_dir,
         mean,
         variance,
@@ -44,6 +45,7 @@ class CraftBaseDataset(Dataset):
     ):
         self.output_size = output_size
         self.data_dir = data_dir
+        self.data_type = data_type
         self.saved_gt_dir = saved_gt_dir
         self.mean, self.variance = mean, variance
         self.gaussian_builder = GaussianBuilder(
@@ -58,10 +60,14 @@ class CraftBaseDataset(Dataset):
             self.idx = random.sample(range(0, len(self.img_names)), self.sample)
 
         self.pre_crop_area = []
+        if not self.data_type == 'train':
+            self.vis_opt = False
 
     def augment_image(
         self, image, region_score, affinity_score, confidence_mask, word_level_char_bbox
     ):
+        if not self.data_type == 'train':
+            self.aug.random_colorjitter.option = False
         augment_targets = [image, region_score, affinity_score, confidence_mask]
 
         if self.aug.random_scale.option:
@@ -319,6 +325,7 @@ class CustomDataset(CraftBaseDataset):
         self,
         output_size,
         data_dir,
+        data_type,
         saved_gt_dir,
         mean,
         variance,
@@ -337,6 +344,7 @@ class CustomDataset(CraftBaseDataset):
         super().__init__(
             output_size,
             data_dir,
+            data_type,
             saved_gt_dir,
             mean,
             variance,
@@ -355,11 +363,18 @@ class CustomDataset(CraftBaseDataset):
             watershed_param, vis_test_dir, pseudo_vis_opt, self.gaussian_builder
         )
         self.vis_index = list(range(1000))
-        self.img_dir = os.path.join(data_dir, "ch4_training_images")
-        self.img_gt_box_dir = os.path.join(
-            data_dir, "ch4_training_localization_transcription_gt"
-        )
-        self.img_names = os.listdir(self.img_dir)
+        if self.data_type == 'train':
+            self.img_dir = os.path.join(data_dir, "ch4_training_images")
+            self.img_gt_box_dir = os.path.join(
+                data_dir, "ch4_training_localization_transcription_gt"
+            )
+            self.img_names = os.listdir(self.img_dir)
+        else:
+            self.img_dir = os.path.join(data_dir, "ch4_test_images")
+            self.img_gt_box_dir = os.path.join(
+                data_dir, "ch4_test_localization_transcription_gt"
+            )
+            self.img_names = os.listdir(self.img_dir)[:100]
 
     def update_model(self, net):
         self.net = net
@@ -474,6 +489,7 @@ class CustomDataset(CraftBaseDataset):
             region_score = self.gaussian_builder.generate_region(
                 img_h, img_w, word_level_char_bbox, horizontal_text_bools
             )
+            # print(f"printing from CustomeDataset | {self.img_names[index]}")
             affinity_score, all_affinity_bbox = self.gaussian_builder.generate_affinity(
                 img_h, img_w, word_level_char_bbox, horizontal_text_bools
             )

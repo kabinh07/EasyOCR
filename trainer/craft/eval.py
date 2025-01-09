@@ -235,6 +235,8 @@ def main_eval(model_path, backbone, config, evaluator, result_dir, buffer, model
 
     total_imgs_bboxes_gt, total_imgs_path = load_test_dataset_iou("custom_data", config)
 
+    # print(f"Printing from eval.py | valid images length: {len(total_imgs_path)}")
+
     if mode == "weak_supervision" and torch.cuda.device_count() != 1:
         gpu_count = torch.cuda.device_count() // 2
     else:

@@ -60,11 +60,12 @@ class Trainer(object):
         )
         return syn_loader
 
-    def get_custom_dataset(self):
+    def get_custom_dataset(self, data_type = "train"):
 
         custom_dataset = CustomDataset(
             output_size=self.config.train.data.output_size,
             data_dir=self.config.data_root_dir,
+            data_type = data_type,
             saved_gt_dir=None,
             mean=self.config.train.data.mean,
             variance=self.config.train.data.variance,
@@ -127,7 +128,10 @@ class Trainer(object):
             model,
             self.mode,
         )
-        self.writer.add_scalar("Evaluation precision", np.round(metrics['recall'], 3), train_step)
+        self.writer.add_scalar("Evaluation precision", np.round(metrics['precision'], 3), train_step)
+        self.writer.add_scalar("Evaluation recall", np.round(metrics['recall'], 3), train_step)
+        self.writer.add_scalar("Evaluation hmean", np.round(metrics['hmean'], 3), train_step)
+
         if self.gpu == 0 and self.config.wandb_opt:
             wandb.log(
                 {
@@ -184,6 +188,7 @@ class Trainer(object):
 
         if self.config.train.real_dataset == "custom":
             trn_real_dataset = self.get_custom_dataset()
+            valid_dataset = self.get_custom_dataset(data_type='valid')
         else:
             raise Exception("Undefined dataset")
 
@@ -191,8 +196,19 @@ class Trainer(object):
             trn_real_dataset.update_model(supervision_model)
             trn_real_dataset.update_device(supervision_device)
 
+            valid_dataset.update_model(supervision_model)
+            valid_dataset.update_device(supervision_device)
+
         trn_real_loader = torch.utils.data.DataLoader(
             trn_real_dataset,
+            batch_size=self.config.train.batch_size,
+            shuffle=False,
+            num_workers=self.config.train.num_workers,
+            drop_last=False,
+            pin_memory=True,
+        )
+        valid_data_loader = torch.utils.data.DataLoader(
+            valid_dataset,
             batch_size=self.config.train.batch_size,
             shuffle=False,
             num_workers=self.config.train.num_workers,
@@ -233,12 +249,19 @@ class Trainer(object):
         update_lr_rate_step = 0
         training_lr = self.config.train.lr
         loss_value = 0
+        val_loss = 0
         batch_time = 0
         start_time = time.time()
 
         print(
             "================================ Train start ================================"
         )
+
+        # print(f"printing from training loop: ")
+        # for name, param in craft.named_parameters():
+        #     if not 'conv_cls' in name:
+        #         param.requires_grad = False
+
         while train_step < whole_training_step:
             for (
                     index,
@@ -312,13 +335,16 @@ class Trainer(object):
 
                 if self.config.train.amp:
                     with torch.cuda.amp.autocast():
-                        print(f"printing from training loop: ")
-                        for param in craft.parameters():
-                            print(param)
+
+                        # for name, param in craft.named_parameters():
+                        #     if param.requires_grad:
+                        #         print(name)
 
                         output, _ = craft(images)
                         out1 = output[:, :, :, 0]
                         out2 = output[:, :, :, 1]
+
+                        
 
                         # print(f"out1 shape: {out1.shape}")
                         # print(f"out2 shape: {out2.shape}")
@@ -359,8 +385,6 @@ class Trainer(object):
                 loss_value += loss.item()
                 batch_time += end_time - start_time
 
-                self.writer.add_scalar("Training loss", loss_value, train_step)
-
                 if train_step > 0 and train_step % 5 == 0:
                     mean_loss = loss_value / 5
                     loss_value = 0
@@ -380,7 +404,7 @@ class Trainer(object):
                             avg_batch_time,
                         )
                     )
-
+                    self.writer.add_scalar("Training loss", mean_loss, train_step)
                     if self.config.wandb_opt:
                         wandb.log({"train_step": train_step, "mean_loss": mean_loss})
 
@@ -413,9 +437,53 @@ class Trainer(object):
                                 + ".pth"
                         )
 
-                    torch.save(save_param_dic, save_param_path)
+                    # torch.save(save_param_dic, save_param_path)
 
                     # validation
+                    for (index,(images, region_scores, affinity_scores, confidence_masks,),) in enumerate(valid_data_loader):
+                        images = images.cuda(non_blocking=True)
+                        region_scores = region_scores.cuda(non_blocking=True)
+                        affinity_scores = affinity_scores.cuda(non_blocking=True)
+                        confidence_masks = confidence_masks.cuda(non_blocking=True)
+                        region_image_label = region_scores
+                        affinity_image_label = affinity_scores
+                        confidence_mask_label = confidence_masks
+
+                        if self.config.train.amp:
+                            with torch.cuda.amp.autocast():
+
+                                # for name, param in craft.named_parameters():
+                                #     if param.requires_grad:
+                                #         print(name)
+                                with torch.no_grad():
+                                    output, _ = craft(images)
+                                    out1 = output[:, :, :, 0]
+                                    out2 = output[:, :, :, 1]
+
+                                
+
+                                # print(f"out1 shape: {out1.shape}")
+                                # print(f"out2 shape: {out2.shape}")
+
+                                loss = criterion(
+                                    region_image_label,
+                                    affinity_image_label,
+                                    out1,
+                                    out2,
+                                    confidence_mask_label,
+                                    self.config.train.neg_rto,
+                                    self.config.train.n_min_neg,
+                                )
+
+                            optimizer.zero_grad()
+                        val_loss += loss.item()
+                    mean_val_loss = val_loss/len(valid_data_loader)
+                    self.writer.add_scalar("Validation loss", mean_val_loss , train_step)
+                    val_loss = 0
+
+
+
+
                     self.iou_eval(
                         "custom_data",
                         train_step,

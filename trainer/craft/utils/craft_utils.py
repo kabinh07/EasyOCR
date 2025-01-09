@@ -6,6 +6,7 @@ import cv2
 import math
 import numpy as np
 from data import imgproc
+from PIL import Image
 
 """ auxilary functions """
 # unwarp corodinates
@@ -32,9 +33,21 @@ def getDetBoxes_core(textmap, linkmap, text_threshold, link_threshold, low_text)
     ret, text_score = cv2.threshold(textmap, low_text, 1, 0)
     ret, link_score = cv2.threshold(linkmap, link_threshold, 1, 0)
 
+    # t_i = Image.fromarray(text_score*255).convert("L")
+    # t_l = Image.fromarray(linkmap*255).convert("L")
+    # t_i.save('/home/EasyOCR/example_data/test_1.jpg')
+    # t_l.save('/home/EasyOCR/example_data/test_2.jpg')
+    # print(f"printing from craft utils | text_score: {np.expand_dims(np.array(text_score), axis = 0)}")
+    # print(f"printing from craft utils | link_score: {np.expand_dims(np.array(link_score), axis = 0)}")
+
     text_score_comb = np.clip(text_score + link_score, 0, 1)
+    # t_ts = Image.fromarray(text_score_comb*255).convert("L")
+    # t_ts.save('/home/EasyOCR/example_data/test_3.jpg')
+    # print(f"printing from craft utils | text_score_comb {np.array(text_score_comb)}")
     nLabels, labels, stats, centroids = \
         cv2.connectedComponentsWithStats(text_score_comb.astype(np.uint8), connectivity=4)
+
+    # print(f"printing from craft utils | labels: {labels}")
 
     det = []
     mapper = []
@@ -46,13 +59,20 @@ def getDetBoxes_core(textmap, linkmap, text_threshold, link_threshold, low_text)
         # thresholding
         if np.max(textmap[labels==k]) < text_threshold: continue
 
+        # print(f"printing from craft_utils.py | labels: {labels}")
+        # print(f"printing from craft_utils.py | k: {k}")
+        # print(f"printing from craft_utils.py | value: {np.max(textmap[labels==k])}")
+
         # make segmentation map
         segmap = np.zeros(textmap.shape, dtype=np.uint8)
         segmap[labels==k] = 255
+        # t_sg = Image.fromarray(segmap).convert("L")
+        # t_sg.save('/home/EasyOCR/example_data/test_4.jpg')
         segmap[np.logical_and(link_score==1, text_score==0)] = 0   # remove link area
         x, y = stats[k, cv2.CC_STAT_LEFT], stats[k, cv2.CC_STAT_TOP]
         w, h = stats[k, cv2.CC_STAT_WIDTH], stats[k, cv2.CC_STAT_HEIGHT]
         niter = int(math.sqrt(size * min(w, h) / (w * h)) * 2)
+        # print(f"printing from craft_utils | kernel size: {niter}")
         sx, ex, sy, ey = x - niter, x + w + niter + 1, y - niter, y + h + niter + 1
         # boundary check
         if sx < 0 : sx = 0
@@ -83,8 +103,13 @@ def getDetBoxes_core(textmap, linkmap, text_threshold, link_threshold, low_text)
         box = np.roll(box, 4-startidx, 0)
         box = np.array(box)
 
+        # print(det, mapper)
         det.append(box)
         mapper.append(k)
+
+    # print(f"printing from craft_utils.py | det: {det}")
+    # print(f"printing from craft_utils.py | labels: {labels.shape}")
+    # print(f"printing from craft_utils.py | mapper: {mapper}")
 
     return det, labels, mapper
 

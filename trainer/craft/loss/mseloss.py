@@ -30,6 +30,8 @@ class Maploss_v2(nn.Module):
         # negative_loss
         negative_pixel = (label_score <= 0.1).float()
         negative_pixel_number = torch.sum(negative_pixel)
+        # print(f"Printing from MSE loss | pos pixel number: {positive_pixel_number}")
+        # print(f"Printing from MSE loss | neg pixel number: {negative_pixel_number}")
         negative_loss_region = pred_score * negative_pixel
 
         if positive_pixel_number != 0:
