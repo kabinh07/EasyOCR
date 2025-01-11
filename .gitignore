@@ -114,3 +114,5 @@ trainer/craft/pretrained_model/*
 *.jpg
 *.jpeg
 *.png
+*.txt 
+trainer/craft/runs

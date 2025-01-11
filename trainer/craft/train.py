@@ -22,6 +22,7 @@ from utils.util import copyStateDict, save_parser
 
 from PIL import Image, ImageDraw
 from torch.utils.tensorboard import SummaryWriter
+import cv2
 
 
 class Trainer(object):
@@ -336,14 +337,31 @@ class Trainer(object):
                 if self.config.train.amp:
                     with torch.cuda.amp.autocast():
 
-                        # for name, param in craft.named_parameters():
-                        #     if param.requires_grad:
-                        #         print(name)
-
                         output, _ = craft(images)
                         out1 = output[:, :, :, 0]
                         out2 = output[:, :, :, 1]
-
+                        
+                        if train_step % 5 == 0:
+                            # print(images[0].squeeze().permute(1,2,0).cpu().numpy().shape)
+                            img = Image.fromarray(images[0].permute(1,2,0).cpu().detach().numpy().astype(np.uint8))
+                            reg_scaled = (cv2.resize(region_image_label[0].cpu().detach().numpy(), (768, 768), interpolation=cv2.INTER_LINEAR)*255).astype(np.uint8)
+                            reg = Image.fromarray(reg_scaled, mode = "L")
+                            aff_scaled = (cv2.resize(affinity_image_label[0].cpu().detach().numpy(), (768, 768), interpolation=cv2.INTER_LINEAR)*255).astype(np.uint8)
+                            aff = Image.fromarray(aff_scaled, mode = "L")
+                            cnf_scaled = (cv2.resize(confidence_mask_label[0].cpu().detach().numpy(), (768, 768), interpolation=cv2.INTER_LINEAR)*255).astype(np.uint8)
+                            cnf = Image.fromarray(cnf_scaled, mode = "L")
+                            # print(f"Printing from trianing loop | size of output: {out1[0].cpu().detach().numpy().shape} | type: {type(out1[0].cpu().detach().numpy())}")
+                            ot1_scaled = cv2.resize((out1[0].cpu().detach().numpy()*255).astype(np.uint8), (768, 768), interpolation=cv2.INTER_LINEAR).astype(np.uint8)
+                            # print(f"Printing from trianing loop | size of output: {ot1_scaled.shape}")
+                            ot1 = Image.fromarray(ot1_scaled, mode = "L")
+                            ot2_scaled = cv2.resize((out2[0].cpu().detach().numpy()*255).astype(np.uint8), (768, 768), interpolation=cv2.INTER_LINEAR).astype(np.uint8)
+                            ot2 = Image.fromarray(ot2_scaled, mode = "L")
+                            img.save(os.path.join('/home/EasyOCR/example_data', f"{train_step}_image.jpg"))
+                            reg.save(os.path.join('/home/EasyOCR/example_data', f"{train_step}_region.jpg"))
+                            aff.save(os.path.join('/home/EasyOCR/example_data', f"{train_step}_affinity.jpg"))
+                            cnf.save(os.path.join('/home/EasyOCR/example_data', f"{train_step}_confidence.jpg"))
+                            ot1.save(os.path.join('/home/EasyOCR/example_data', f"{train_step}_output_reg.jpg"))
+                            ot2.save(os.path.join('/home/EasyOCR/example_data', f"{train_step}_output_aff.jpg"))
                         
 
                         # print(f"out1 shape: {out1.shape}")

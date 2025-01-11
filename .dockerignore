@@ -1,0 +1,4 @@
+*.pt
+trainer/craft/data_root_dir/*
+trainer/craft/exp/*
+trainer/craft/vis_result/*
