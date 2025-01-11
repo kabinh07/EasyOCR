@@ -41,7 +41,7 @@ train:
     gauss_sigma: 20
     watershed:
       version: "skimage"
-      sure_fg_th: 0.75
+      sure_fg_th: 0.5
       sure_bg_th: 0.05
     syn_sample: -1
     custom_sample: -1
@@ -92,9 +92,9 @@ test:
     test_data_dir: "./data_root_dir/"
     text_threshold: 0.5
     low_text: 0.5
-    link_threshold: 0.1
+    link_threshold: 0.2
     canvas_size: 2240
-    mag_ratio: 3
+    mag_ratio: 1
     poly: False
     cuda: True
     vis_opt: True
