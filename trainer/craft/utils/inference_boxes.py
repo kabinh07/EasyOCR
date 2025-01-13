@@ -319,7 +319,10 @@ def test_net(
     img_resized, target_ratio, size_heatmap = imgproc.resize_aspect_ratio(
         image, canvas_size, interpolation=cv2.INTER_LINEAR, mag_ratio=mag_ratio
     )
-    ratio_h = ratio_w = 1 / target_ratio
+
+    ratio_h = 1/target_ratio[0]
+    ratio_w = 1/target_ratio[1]
+    # ratio_h = ratio_w = 1 / target_ratio
 
     real_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     res_image = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
@@ -363,8 +366,8 @@ def test_net(
     score_link = y[0, :, :, 1].cpu().data.numpy().astype(np.float32)
 
     # NOTE
-    score_text = score_text[: size_heatmap[0], : size_heatmap[1]]
-    score_link = score_link[: size_heatmap[0], : size_heatmap[1]]
+    # score_text = score_text[: size_heatmap[0], : size_heatmap[1]]
+    # score_link = score_link[: size_heatmap[0], : size_heatmap[1]]
 
     # Post-processing
     boxes, polys = getDetBoxes(

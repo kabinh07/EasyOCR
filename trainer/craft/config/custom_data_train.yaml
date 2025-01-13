@@ -1,4 +1,5 @@
 wandb_opt: False
+tensorboard: False
 
 results_dir: "./exp/"
 vis_test_dir: "./vis_result/"
@@ -15,7 +16,7 @@ train:
   synth_ratio: 5
   real_dataset: custom
   ckpt_path: "./pretrained_model/CRAFT_clr_amp_29500.pth"
-  eval_interval: 40
+  eval_interval: 2
   batch_size: 5
   st_iter: 0
   end_iter: 500
@@ -90,8 +91,8 @@ test:
   custom_data:
     test_set_size: 100
     test_data_dir: "./data_root_dir/"
-    text_threshold: 0.3
-    low_text: 0.1
+    text_threshold: 0.6
+    low_text: 0.5
     link_threshold: 0.5
     canvas_size: 768
     mag_ratio: 1

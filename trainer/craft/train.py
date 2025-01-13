@@ -27,8 +27,9 @@ import cv2
 
 class Trainer(object):
     def __init__(self, config, gpu, mode):
-        self.writer = SummaryWriter()
         self.config = config
+        if self.config.tensorboard:
+            self.writer = SummaryWriter()
         self.gpu = gpu
         self.mode = mode
         self.net_param = self.get_load_param(gpu)
@@ -129,9 +130,10 @@ class Trainer(object):
             model,
             self.mode,
         )
-        self.writer.add_scalar("Evaluation precision", np.round(metrics['precision'], 3), train_step)
-        self.writer.add_scalar("Evaluation recall", np.round(metrics['recall'], 3), train_step)
-        self.writer.add_scalar("Evaluation hmean", np.round(metrics['hmean'], 3), train_step)
+        if self.config.tensorboard:    
+            self.writer.add_scalar("Evaluation precision", np.round(metrics['precision'], 3), train_step)
+            self.writer.add_scalar("Evaluation recall", np.round(metrics['recall'], 3), train_step)
+            self.writer.add_scalar("Evaluation hmean", np.round(metrics['hmean'], 3), train_step)
 
         if self.gpu == 0 and self.config.wandb_opt:
             wandb.log(
@@ -422,7 +424,8 @@ class Trainer(object):
                             avg_batch_time,
                         )
                     )
-                    self.writer.add_scalar("Training loss", mean_loss, train_step)
+                    if self.config.tensorboard:
+                        self.writer.add_scalar("Training loss", mean_loss, train_step)
                     if self.config.wandb_opt:
                         wandb.log({"train_step": train_step, "mean_loss": mean_loss})
 
@@ -496,7 +499,8 @@ class Trainer(object):
                             optimizer.zero_grad()
                         val_loss += loss.item()
                     mean_val_loss = val_loss/len(valid_data_loader)
-                    self.writer.add_scalar("Validation loss", mean_val_loss , train_step)
+                    if self.config.tensorboard:
+                        self.writer.add_scalar("Validation loss", mean_val_loss , train_step)
                     val_loss = 0
 
 
@@ -537,7 +541,8 @@ class Trainer(object):
                     + ".pth"
             )
         torch.save(save_param_dic, save_param_path)
-        self.writer.flush()
+        if self.config.tensorboard:
+            self.writer.flush()
 
 
 def main():
@@ -594,7 +599,8 @@ def main():
 
     if config["wandb_opt"]:
         wandb.finish()
-    trainer.writer.close()
+    if self.config.tensorboard:
+        trainer.writer.close()
 
 
 if __name__ == "__main__":

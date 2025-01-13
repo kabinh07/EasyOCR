@@ -54,19 +54,25 @@ def denormalizeMeanVariance(
 def resize_aspect_ratio(img, square_size, interpolation, mag_ratio=1):
     height, width, channel = img.shape
 
+    target_size = (768, 768)
+
     # magnify image size
-    target_size = mag_ratio * max(height, width)
+    # target_size = mag_ratio * max(height, width)
 
     # set original image size
-    if target_size > square_size:
-        target_size = square_size
+    # if target_size > square_size:
+    #     target_size = square_size
 
-    ratio = target_size / max(height, width)
+    ratio = (target_size[0]/height, target_size[1]/width)
 
-    target_h, target_w = int(height * ratio), int(width * ratio)
+    target_h, target_w = target_size[0], target_size[1]
+
+    # print(f"printing from improc.py | target_h, target_width: {target_h, target_w}")
 
     # NOTE
     valid_size_heatmap = (int(target_h / 2), int(target_w / 2))
+
+    # print(f"printing from improc.py | valid_size_heatmap: {valid_size_heatmap}")
 
     proc = cv2.resize(img, (target_w, target_h), interpolation=interpolation)
 
@@ -82,7 +88,7 @@ def resize_aspect_ratio(img, square_size, interpolation, mag_ratio=1):
     # target_h, target_w = target_h32, target_w32
     # size_heatmap = (int(target_w/2), int(target_h/2))
 
-    resized = cv2.resize(resized, (768, 768))
+    # resized = cv2.resize(resized, (768, 768))
 
     # print(f"print from imgproc.py | resized: {resized.shape}")
     # print(f"print from imgproc.py | ratio: {ratio}")
