@@ -82,6 +82,12 @@ def resize_aspect_ratio(img, square_size, interpolation, mag_ratio=1):
     # target_h, target_w = target_h32, target_w32
     # size_heatmap = (int(target_w/2), int(target_h/2))
 
+    resized = cv2.resize(resized, (768, 768))
+
+    # print(f"print from imgproc.py | resized: {resized.shape}")
+    # print(f"print from imgproc.py | ratio: {ratio}")
+    # print(f"print from imgproc.py | valid_size_heatmap: {valid_size_heatmap}")
+
     return resized, ratio, valid_size_heatmap
 
 

@@ -341,7 +341,7 @@ class Trainer(object):
                         out1 = output[:, :, :, 0]
                         out2 = output[:, :, :, 1]
                         
-                        if train_step % 5 == 0:
+                        if train_step % 40 == 0:
                             # print(images[0].squeeze().permute(1,2,0).cpu().numpy().shape)
                             img = Image.fromarray(images[0].permute(1,2,0).cpu().detach().numpy().astype(np.uint8))
                             reg_scaled = (cv2.resize(region_image_label[0].cpu().detach().numpy(), (768, 768), interpolation=cv2.INTER_LINEAR)*255).astype(np.uint8)

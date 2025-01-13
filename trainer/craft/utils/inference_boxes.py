@@ -13,6 +13,7 @@ from data import imgproc
 from data.dataset import SynthTextDataSet
 import math
 import xml.etree.ElementTree as elemTree
+from PIL import Image
 
 
 #-------------------------------------------------------------------------------------------------------------------#
@@ -320,6 +321,18 @@ def test_net(
     )
     ratio_h = ratio_w = 1 / target_ratio
 
+    real_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    res_image = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
+    # print(f"pritning from eval.py | image shape: {real_image.shape}")
+    # print(f"pritning from eval.py | resized image shape: {res_image.shape}")
+    real_image = Image.fromarray(real_image.astype(np.uint8))
+    res_image = Image.fromarray(res_image.astype(np.uint8))
+    # print(f"printing from inferences.py | image shape: {real_image.size}")
+    # print(f"printing from inferences.py | resized image shape: {res_image.size}")
+    # print(f"printing from inferences.py | resized size_heatmap: {size_heatmap}")
+    real_image.save("/home/EasyOCR/example_data/eval/real_image.jpg")
+    res_image.save("/home/EasyOCR/example_data/eval/resized_image.jpg")
+
     # preprocessing
     x = imgproc.normalizeMeanVariance(img_resized)
     x = torch.from_numpy(x).permute(2, 0, 1)  # [h, w, c] to [c, h, w]
@@ -330,6 +343,20 @@ def test_net(
     # forward pass
     with torch.no_grad():
         y, feature = net(x)
+
+    out1 = y[:, :, :, 0]
+    out2 = y[:, :, :, 1]
+
+    # print(f"printing from inferences.py | out1 shape: {out1.shape}")
+    # print(f"printing from inferences.py | out2 shape: {out2.shape}")
+
+    ot1_scaled = cv2.resize((out1[0].cpu().detach().numpy()*255).astype(np.uint8), (img_resized.shape[1], img_resized.shape[0]), interpolation=cv2.INTER_LINEAR).astype(np.uint8)
+    ot1 = Image.fromarray(ot1_scaled, mode = "L")
+    ot2_scaled = cv2.resize((out2[0].cpu().detach().numpy()*255).astype(np.uint8), (img_resized.shape[1], img_resized.shape[0]), interpolation=cv2.INTER_LINEAR).astype(np.uint8)
+    ot2 = Image.fromarray(ot2_scaled, mode = "L")
+
+    ot1.save("/home/EasyOCR/example_data/eval/out_reg_image.jpg")
+    ot2.save("/home/EasyOCR/example_data/eval/out_aff_image.jpg")
 
     # make score and link map
     score_text = y[0, :, :, 0].cpu().data.numpy().astype(np.float32)
@@ -343,7 +370,7 @@ def test_net(
     boxes, polys = getDetBoxes(
         score_text, score_link, text_threshold, link_threshold, low_text, poly
     )
-
+    # print(f"printing from inferences.py | #boxes: {len(boxes)}")
     # coordinate adjustment
     boxes = adjustResultCoordinates(boxes, ratio_w, ratio_h)
     polys = adjustResultCoordinates(polys, ratio_w, ratio_h)

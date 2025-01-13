@@ -73,14 +73,16 @@ def getDetBoxes_core(textmap, linkmap, text_threshold, link_threshold, low_text)
         w, h = stats[k, cv2.CC_STAT_WIDTH], stats[k, cv2.CC_STAT_HEIGHT]
         niter = int(math.sqrt(size * min(w, h) / (w * h)) * 2)
         # print(f"printing from craft_utils | kernel size: {niter}")
-        sx, ex, sy, ey = x - niter, x + w + niter + 1, y - 1, y + h + 1
+        sx, ex, sy, ey = x - niter, x + w + niter + 1, y - niter, y + h + niter + 1
         # boundary check
         if sx < 0 : sx = 0
         if sy < 0 : sy = 0
         if ex >= img_w: ex = img_w
         if ey >= img_h: ey = img_h
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(1 + niter, 1))
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(1 + niter, 1 + niter))
         segmap[sy:ey, sx:ex] = cv2.dilate(segmap[sy:ey, sx:ex], kernel, iterations=1)
+
+        print()
         #kernel1 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 5))
         #segmap[sy:ey, sx:ex] = cv2.dilate(segmap[sy:ey, sx:ex], kernel1, iterations=1)
 

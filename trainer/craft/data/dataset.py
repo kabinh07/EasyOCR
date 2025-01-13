@@ -481,6 +481,8 @@ class CustomDataset(CraftBaseDataset):
         ) = self.load_data(index)
         img_h, img_w, _ = image.shape
 
+        # print(f"printing from dataset.py | horizontal text bool: {horizontal_text_bools}")
+
         if len(word_level_char_bbox) == 0:
             region_score = np.zeros((img_h, img_w), dtype=np.float32)
             affinity_score = np.zeros((img_h, img_w), dtype=np.float32)
