@@ -54,7 +54,7 @@ def getDetBoxes_core(textmap, linkmap, text_threshold, link_threshold, low_text)
     nLabels, labels, stats, centroids = \
         cv2.connectedComponentsWithStats(text_score_comb.astype(np.uint8), connectivity=4)
 
-    print(f"printing from craft utils | labels: {nLabels}")
+    # print(f"printing from craft utils | labels: {nLabels}")
 
     det = []
     mapper = []
