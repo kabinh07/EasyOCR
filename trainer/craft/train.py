@@ -5,12 +5,15 @@ import shutil
 import time
 import multiprocessing as mp
 import yaml
+import sys
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import wandb
+
+import torch.multiprocessing as mp
 
 from config.load_config import load_yaml, DotDict
 from data.dataset import SynthTextDataSet, CustomDataset
@@ -24,6 +27,25 @@ from PIL import Image, ImageDraw
 from torch.utils.tensorboard import SummaryWriter
 import cv2
 
+class EarlyStopper:
+    def __init__(self, patience=1, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.min_validation_loss = float('inf')
+        self.best_model=None
+    def early_stop(self, validation_loss,model,iteration):
+        # print(f"MIN Validation LOSS={self.min_validation_loss:.7f},CURRENT LOSS:{validation_loss:.7f},CURRENT COUNTER: {self.counter}, ITERATION {iteration} ")
+        if validation_loss < self.min_validation_loss:
+            self.best_model = model
+            self.min_validation_loss = validation_loss
+            self.counter = 0
+        elif validation_loss > (self.min_validation_loss + self.min_delta):
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True
+        return False
+
 
 class Trainer(object):
     def __init__(self, config, gpu, mode):
@@ -33,6 +55,7 @@ class Trainer(object):
         self.gpu = gpu
         self.mode = mode
         self.net_param = self.get_load_param(gpu)
+        self.early_stopper = EarlyStopper(patience=int(self.config.train.patience) if self.config.train.patience else 5)
 
     def get_synth_loader(self):
 
@@ -87,7 +110,6 @@ class Trainer(object):
         return custom_dataset
 
     def get_load_param(self, gpu):
-
         if self.config.train.ckpt_path is not None:
             map_location = "cuda:%d" % gpu
             param = torch.load(self.config.train.ckpt_path, map_location=map_location)
@@ -147,9 +169,7 @@ class Trainer(object):
             )
 
     def train(self, buffer_dict):
-
         torch.cuda.set_device(self.gpu)
-
         # MODEL -------------------------------------------------------------------------------------------------------#
         # SUPERVISION model
         if self.config.mode == "weak_supervision":
@@ -159,6 +179,7 @@ class Trainer(object):
                 raise Exception("Undefined architecture")
 
             supervision_device = self.gpu
+            # print(f"prtining from train.py | devices count: {torch.cuda.device_count()}")
             if self.config.train.ckpt_path is not None:
                 supervision_param = self.get_load_param(supervision_device)
                 supervision_model.load_state_dict(
@@ -178,8 +199,8 @@ class Trainer(object):
         if self.config.train.ckpt_path is not None:
             craft.load_state_dict(copyStateDict(self.net_param['craft']))
 
-        craft = craft.cuda()
         craft = torch.nn.DataParallel(craft)
+        craft = craft.cuda()
 
         torch.backends.cudnn.benchmark = True
 
@@ -254,6 +275,7 @@ class Trainer(object):
         loss_value = 0
         val_loss = 0
         batch_time = 0
+        best_val_loss = float('inf')
         start_time = time.time()
 
         print(
@@ -444,24 +466,18 @@ class Trainer(object):
                     }
                     save_param_path = (
                             self.config.results_dir
-                            + "/CRAFT_clr_"
-                            + repr(train_step)
-                            + ".pth"
+                            + "/CRAFT_clr_best.pt"
                     )
 
                     if self.config.train.amp:
                         save_param_dic["scaler"] = scaler.state_dict()
                         save_param_path = (
                                 self.config.results_dir
-                                + "/CRAFT_clr_amp_"
-                                + repr(train_step)
-                                + ".pth"
+                                + "/CRAFT_clr_best.pt"
                         )
 
-                    # torch.save(save_param_dic, save_param_path)
-
                     # validation
-                    for (index,(images, region_scores, affinity_scores, confidence_masks,),) in enumerate(valid_data_loader):
+                    for (index_val,(images, region_scores, affinity_scores, confidence_masks,),) in enumerate(valid_data_loader):
                         images = images.cuda(non_blocking=True)
                         region_scores = region_scores.cuda(non_blocking=True)
                         affinity_scores = affinity_scores.cuda(non_blocking=True)
@@ -481,8 +497,6 @@ class Trainer(object):
                                     out1 = output[:, :, :, 0]
                                     out2 = output[:, :, :, 1]
 
-                                
-
                                 # print(f"out1 shape: {out1.shape}")
                                 # print(f"out2 shape: {out2.shape}")
 
@@ -495,16 +509,18 @@ class Trainer(object):
                                     self.config.train.neg_rto,
                                     self.config.train.n_min_neg,
                                 )
-
                             optimizer.zero_grad()
                         val_loss += loss.item()
                     mean_val_loss = val_loss/len(valid_data_loader)
                     if self.config.tensorboard:
                         self.writer.add_scalar("Validation loss", mean_val_loss , train_step)
+                    # if index == self.config.eval_interval:
+                    #     best_val_loss = mean_val_loss
+                    #     torch.save(save_param_dic, save_param_path)
+                    if mean_val_loss < best_val_loss:
+                        best_val_loss = mean_val_loss
+                        torch.save(save_param_dic, save_param_path)
                     val_loss = 0
-
-
-
 
                     self.iou_eval(
                         "custom_data",
@@ -521,6 +537,14 @@ class Trainer(object):
                 state_dict = craft.module.state_dict()
                 supervision_model.load_state_dict(state_dict)
                 trn_real_dataset.update_model(supervision_model)
+
+            ea = self.early_stopper.early_stop(mean_val_loss, craft, index)
+            print(f"ITERATION: {train_step} -> TRAIN LOSS: {mean_loss:.7f} , MIN LOSS: {self.early_stopper.min_validation_loss:.7f} STEP {self.early_stopper.counter}")
+            if ea:
+                torch.save(
+                    self.early_stopper.best_model.state_dict(), save_param_path)
+                print(f'end the training : early stop: {ea} MIN_LOSS: {self.early_stopper.min_validation_loss:.7f}')
+                sys.exit()
 
         # save last model
         save_param_dic = {
@@ -546,6 +570,7 @@ class Trainer(object):
 
 
 def main():
+    mp.set_start_method('spawn')
     parser = argparse.ArgumentParser(description="CRAFT custom data train")
     parser.add_argument(
         "--yaml",
@@ -599,8 +624,9 @@ def main():
 
     if config["wandb_opt"]:
         wandb.finish()
-    if self.config.tensorboard:
+    if config["tensorboard"]:
         trainer.writer.close()
+    sys.exit()
 
 
 if __name__ == "__main__":
