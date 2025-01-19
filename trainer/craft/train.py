@@ -570,7 +570,7 @@ class Trainer(object):
 
 
 def main():
-    mp.set_start_method('spawn')
+    # mp.set_start_method('spawn')
     parser = argparse.ArgumentParser(description="CRAFT custom data train")
     parser.add_argument(
         "--yaml",

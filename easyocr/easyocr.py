@@ -53,6 +53,7 @@ class Reader(object):
         """
         self.verbose = verbose
         self.download_enabled = download_enabled
+        print(f"prtinting from easyocr.py | downlaod enabled: {self.download_enabled}")
 
         self.model_storage_directory = MODULE_PATH + '/model'
         if model_storage_directory:
@@ -248,6 +249,7 @@ class Reader(object):
             self.get_detector = get_detector
             corrupt_msg = 'MD5 hash mismatch, possible file corruption'
             detector_path = os.path.join(self.model_storage_directory, self.detection_models[self.detect_network]['filename'])
+            print(detector_path)
             if os.path.isfile(detector_path) == False:
                 if not self.download_enabled:
                     raise FileNotFoundError("Missing %s and downloads disabled" % detector_path)
@@ -312,8 +314,8 @@ class Reader(object):
         self.lang_char = set(self.lang_char).union(set(symbol))
         self.lang_char = ''.join(self.lang_char)
 
-    def detect(self, img, min_size = 20, text_threshold = 0.7, low_text = 0.4,\
-               link_threshold = 0.4,canvas_size = 2560, mag_ratio = 1.,\
+    def detect(self, img, min_size = 20, text_threshold = 0.2, low_text = 0.2,\
+               link_threshold = 0.5,canvas_size = 768, mag_ratio = 1,\
                slope_ths = 0.1, ycenter_ths = 0.5, height_ths = 0.5,\
                width_ths = 0.5, add_margin = 0.1, reformat=True, optimal_num_chars=None,
                threshold = 0.2, bbox_min_score = 0.2, bbox_min_size = 3, max_candidates = 0,

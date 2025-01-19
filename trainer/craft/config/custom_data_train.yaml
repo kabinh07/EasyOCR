@@ -19,12 +19,12 @@ train:
   eval_interval: 500
   batch_size: 5
   st_iter: 0
-  end_iter: 25000
+  end_iter: 11000
   lr: 0.00001
   lr_decay: 500
   gamma: 0.2
   weight_decay: 0.0000001
-  num_workers: 3 # On single gpu, train.py execution only works when num worker = 0 / On multi-gpu, you can set num_worker > 0 to speed up
+  num_workers: 0 # On single gpu, train.py execution only works when num worker = 0 / On multi-gpu, you can set num_worker > 0 to speed up
   amp: True
   loss: 3
   neg_rto: 0.3
