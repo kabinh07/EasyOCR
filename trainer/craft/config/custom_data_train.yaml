@@ -1,5 +1,5 @@
 wandb_opt: False
-tensorboard: True
+tensorboard: False
 
 results_dir: "./exp/"
 vis_test_dir: "./vis_result/"
@@ -15,32 +15,32 @@ train:
   synth_data_dir: "/data/SynthText/"
   synth_ratio: 5
   real_dataset: custom
-  ckpt_path: "./exp/custom_data_train_4k/CRAFT_clr_best.pt"
-  eval_interval: 500
-  batch_size: 5
+  ckpt_path: "./exp/custom_data_train_4_4600/CRAFT_clr_last.pt"
+  eval_interval: 2
+  batch_size: 8
   st_iter: 0
-  end_iter: 11000
-  lr: 0.00001
+  end_iter: 10000
+  lr: 0.0001
   lr_decay: 500
   gamma: 0.2
-  weight_decay: 0.0000001
+  weight_decay: 0.00001
   num_workers: 0 # On single gpu, train.py execution only works when num worker = 0 / On multi-gpu, you can set num_worker > 0 to speed up
   amp: True
   loss: 3
   neg_rto: 0.3
   n_min_neg: 5000
-  patience: 10
+  patience: 5
   data:
     vis_opt: True
     pseudo_vis_opt: False
     output_size: 768
-    do_not_care_label: ['###', '']
+    do_not_care_label: ['$$$', '']
     mean: [0.485, 0.456, 0.406]
     variance: [0.229, 0.224, 0.225]
-    enlarge_region : [0.5, 0.2] # x axis, y axis
+    enlarge_region : [0.7, 0.2] # x axis, y axis
     enlarge_affinity: [0.5, 0.2]
     gauss_init_size: 600
-    gauss_sigma: 90
+    gauss_sigma: 88
     watershed:
       version: "skimage"
       sure_fg_th: 0.3
@@ -92,9 +92,9 @@ test:
   custom_data:
     test_set_size: 100
     test_data_dir: "./data_root_dir/"
-    text_threshold: 0.3
-    low_text: 0.3
-    link_threshold: 0.5
+    text_threshold: 0.5
+    low_text: 0.5
+    link_threshold: 0.7
     canvas_size: 768
     mag_ratio: 1
     poly: False

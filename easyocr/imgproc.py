@@ -37,6 +37,10 @@ def denormalizeMeanVariance(in_img, mean=(0.485, 0.456, 0.406), variance=(0.229,
 def resize_aspect_ratio(img, square_size, interpolation, mag_ratio=1):
     height, width, channel = img.shape
 
+    # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # equalized = cv2.equalizeHist(gray)
+    # img = cv2.cvtColor(equalized, cv2.COLOR_GRAY2RGB)
+
     target_size = (768, 768)
 
     # magnify image size

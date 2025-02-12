@@ -12,7 +12,7 @@ import cv2
 import torch
 import os
 import sys
-from PIL import Image
+from PIL import Image, ImageDraw
 from logging import getLogger
 import yaml
 import json
@@ -51,10 +51,9 @@ class Reader(object):
 
             download_enabled (bool): Enabled downloading of model data via HTTP (default).
         """
+        self.grp_img_count = 0
         self.verbose = verbose
         self.download_enabled = download_enabled
-        print(f"prtinting from easyocr.py | downlaod enabled: {self.download_enabled}")
-
         self.model_storage_directory = MODULE_PATH + '/model'
         if model_storage_directory:
             self.model_storage_directory = model_storage_directory
@@ -249,7 +248,6 @@ class Reader(object):
             self.get_detector = get_detector
             corrupt_msg = 'MD5 hash mismatch, possible file corruption'
             detector_path = os.path.join(self.model_storage_directory, self.detection_models[self.detect_network]['filename'])
-            print(detector_path)
             if os.path.isfile(detector_path) == False:
                 if not self.download_enabled:
                     raise FileNotFoundError("Missing %s and downloads disabled" % detector_path)
@@ -314,13 +312,12 @@ class Reader(object):
         self.lang_char = set(self.lang_char).union(set(symbol))
         self.lang_char = ''.join(self.lang_char)
 
-    def detect(self, img, min_size = 20, text_threshold = 0.2, low_text = 0.2,\
+    def detect(self, img, min_size = 25, text_threshold = 0.1, low_text = 0.2,\
                link_threshold = 0.5,canvas_size = 768, mag_ratio = 1,\
-               slope_ths = 0.1, ycenter_ths = 0.5, height_ths = 0.5,\
-               width_ths = 0.5, add_margin = 0.1, reformat=True, optimal_num_chars=None,
-               threshold = 0.2, bbox_min_score = 0.2, bbox_min_size = 3, max_candidates = 0,
+               slope_ths = 0.2, ycenter_ths = 1.0, height_ths = 0.5,\
+               width_ths = 1.0, add_margin = 0.3, reformat=True, optimal_num_chars=None,
+               threshold = 0.2, bbox_min_score = 0.2, bbox_min_size = 5, max_candidates = 0,
                ):
-
         if reformat:
             img, img_cv_grey = reformat_input(img)
 
@@ -351,16 +348,42 @@ class Reader(object):
                     i[1] - i[0], i[3] - i[2]) > min_size]
                 free_list = [i for i in free_list if max(
                     diff([c[0] for c in i]), diff([c[1] for c in i])) > min_size]
+            horizontal_list = [self.__add_padding(box, 1, 3) for box in horizontal_list]
+            free_list = [self.__add_padding(box, 1, 3) for box in free_list]
             horizontal_list_agg.append(horizontal_list)
             free_list_agg.append(free_list)
 
+            # print(img.shape)
+            image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            image = Image.fromarray(image)
+            draw = ImageDraw.Draw(image)
+            colors = ['red', 'blue', 'green']
+            for idx, box in enumerate(horizontal_list_agg[0]):
+                rem = idx % 3
+                color = colors[int(rem)]
+                box = np.array(box)
+                box[box<0] = 0
+                # print(box)
+                # print([box[0], box[2], box[1], box[3]])
+                draw.rectangle((box[0], box[2], box[1], box[3]), outline=color)
+            os.makedirs('/home/EasyOCR/example_data/test/data/bounding_boxes/', exist_ok=True)
+            image.save(f"/home/EasyOCR/example_data/test/data/bounding_boxes/bboxes_grouped_{self.grp_img_count}.jpg")
+            self.grp_img_count += 1
+
         return horizontal_list_agg, free_list_agg
+    
+    def __add_padding(self, box, x_pad, y_pad):
+        box[0] -= x_pad
+        box[1] += x_pad
+        box[2] -= y_pad
+        box[3] += y_pad
+        return box
 
     def recognize(self, img_cv_grey, horizontal_list=None, free_list=None,\
-                  decoder = 'greedy', beamWidth= 5, batch_size = 1,\
+                  decoder = 'greedy', beamWidth= 10, batch_size = 1,\
                   workers = 0, allowlist = None, blocklist = None, detail = 1,\
-                  rotation_info = None,paragraph = False,\
-                  contrast_ths = 0.1,adjust_contrast = 0.5, filter_ths = 0.003,\
+                  rotation_info = None,paragraph = True,\
+                  contrast_ths = 0.5,adjust_contrast = 0.5, filter_ths = 0.003,\
                   y_ths = 0.5, x_ths = 1.0, reformat=True, output_format='standard'):
 
         if reformat:
@@ -394,6 +417,7 @@ class Reader(object):
             for bbox in free_list:
                 h_list = []
                 f_list = [bbox]
+                print(f"printing from easyocr 412 | box: {bbox}")
                 image_list, max_width = get_image_list(h_list, f_list, img_cv_grey, model_height = imgH)
                 result0 = get_text(self.character, imgH, int(max_width), self.recognizer, self.converter, image_list,\
                               ignore_char, decoder, beamWidth, batch_size, contrast_ths, adjust_contrast, filter_ths,\

@@ -87,7 +87,7 @@ def getDetBoxes_core(textmap, linkmap, text_threshold, link_threshold, low_text)
         if sy < 0 : sy = 0
         if ex >= img_w: ex = img_w
         if ey >= img_h: ey = img_h
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(1 + niter, 1 + niter))
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(1 + niter, 1))
         segmap[sy:ey, sx:ex] = cv2.dilate(segmap[sy:ey, sx:ex], kernel, iterations=1)
 
         # print(f"printing from craft_utils.py | segmap size: {segmap.shape}")

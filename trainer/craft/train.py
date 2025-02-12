@@ -27,6 +27,23 @@ from PIL import Image, ImageDraw
 from torch.utils.tensorboard import SummaryWriter
 import cv2
 
+#DDP
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import init_process_group, destroy_process_group
+
+def ddp_setup(rank: int, world_size: int):
+   """
+   Args:
+       rank: Unique identifier of each process
+      world_size: Total number of processes
+   """
+   os.environ["MASTER_ADDR"] = "localhost"
+   os.environ["MASTER_PORT"] = "12355"
+   torch.cuda.set_device(rank)
+   init_process_group(backend="nccl", rank=rank, world_size=world_size)
+
 class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
         self.patience = patience
@@ -48,13 +65,11 @@ class EarlyStopper:
 
 
 class Trainer(object):
-    def __init__(self, config, gpu, mode):
+    def __init__(self, config, mode):
         self.config = config
         if self.config.tensorboard:
             self.writer = SummaryWriter()
-        self.gpu = gpu
         self.mode = mode
-        self.net_param = self.get_load_param(gpu)
         self.early_stopper = EarlyStopper(patience=int(self.config.train.patience) if self.config.train.patience else 5)
 
     def get_synth_loader(self):
@@ -110,11 +125,23 @@ class Trainer(object):
         return custom_dataset
 
     def get_load_param(self, gpu):
-        if self.config.train.ckpt_path is not None:
-            map_location = "cuda:%d" % gpu
-            param = torch.load(self.config.train.ckpt_path, map_location=map_location)
+        rank = torch.distributed.get_rank()  # Get current process rank
+
+        if rank == 0:
+            # Load checkpoint ONLY on rank 0
+            if self.config.train.ckpt_path is not None:
+                print(f"Rank {rank}: Loading checkpoint from {self.config.train.ckpt_path}")
+                map_location = f"cuda:{gpu}"
+                param = torch.load(self.config.train.ckpt_path, map_location=map_location)
+            else:
+                param = None
         else:
-            param = None
+            param = None  # Other ranks do not load from disk
+
+        # Broadcast the loaded parameters from rank 0 to all processes
+        param_list = [param]  # Convert to list for broadcast
+        torch.distributed.broadcast_object_list(param_list, src=0)  
+        param = param_list[0]  # Extract back from list
 
         return param
 
@@ -168,20 +195,21 @@ class Trainer(object):
                 }
             )
 
-    def train(self, buffer_dict):
-        torch.cuda.set_device(self.gpu)
+    def train(self, rank, world_size, buffer_dict):
+        ddp_setup(rank, world_size)
         # MODEL -------------------------------------------------------------------------------------------------------#
         # SUPERVISION model
+        supervision_device = rank
+        supervision_param = self.get_load_param(supervision_device)
+
+
         if self.config.mode == "weak_supervision":
             if self.config.train.backbone == "vgg":
                 supervision_model = CRAFT(pretrained=False, amp=self.config.train.amp)
             else:
                 raise Exception("Undefined architecture")
-
-            supervision_device = self.gpu
             # print(f"prtining from train.py | devices count: {torch.cuda.device_count()}")
             if self.config.train.ckpt_path is not None:
-                supervision_param = self.get_load_param(supervision_device)
                 supervision_model.load_state_dict(
                     copyStateDict(supervision_param['craft'])
                 )
@@ -197,10 +225,11 @@ class Trainer(object):
             raise Exception("Undefined architecture")
 
         if self.config.train.ckpt_path is not None:
-            craft.load_state_dict(copyStateDict(self.net_param['craft']))
+            craft.load_state_dict(copyStateDict(supervision_param['craft']))
 
-        craft = torch.nn.DataParallel(craft)
         craft = craft.cuda()
+        craft = DDP(craft)
+        
 
         torch.backends.cudnn.benchmark = True
 
@@ -230,6 +259,7 @@ class Trainer(object):
             num_workers=self.config.train.num_workers,
             drop_last=False,
             pin_memory=True,
+            sampler=DistributedSampler(trn_real_dataset),
         )
         valid_data_loader = torch.utils.data.DataLoader(
             valid_dataset,
@@ -238,6 +268,7 @@ class Trainer(object):
             num_workers=self.config.train.num_workers,
             drop_last=False,
             pin_memory=True,
+            sampler=DistributedSampler(valid_dataset),
         )
 
         # OPTIMIZER ---------------------------------------------------------------------------------------------------#
@@ -248,9 +279,9 @@ class Trainer(object):
         )
 
         if self.config.train.ckpt_path is not None and self.config.train.st_iter != 0:
-            optimizer.load_state_dict(copyStateDict(self.net_param["optimizer"]))
-            self.config.train.st_iter = self.net_param["optimizer"]["state"][0]["step"]
-            self.config.train.lr = self.net_param["optimizer"]["param_groups"][0]["lr"]
+            optimizer.load_state_dict(copyStateDict(supervision_param["optimizer"]))
+            self.config.train.st_iter = supervision_param["optimizer"]["state"][0]["step"]
+            self.config.train.lr = supervision_param["optimizer"]["param_groups"][0]["lr"]
 
         # LOSS --------------------------------------------------------------------------------------------------------#
         # mixed precision
@@ -261,7 +292,7 @@ class Trainer(object):
                     self.config.train.ckpt_path is not None
                     and self.config.train.st_iter != 0
             ):
-                scaler.load_state_dict(copyStateDict(self.net_param["scaler"]))
+                scaler.load_state_dict(copyStateDict(supervision_param["scaler"]))
         else:
             scaler = None
 
@@ -277,15 +308,9 @@ class Trainer(object):
         batch_time = 0
         best_val_loss = float('inf')
         start_time = time.time()
-
         print(
             "================================ Train start ================================"
         )
-
-        # print(f"printing from training loop: ")
-        # for name, param in craft.named_parameters():
-        #     if not 'conv_cls' in name:
-        #         param.requires_grad = False
 
         while train_step < whole_training_step:
             for (
@@ -298,6 +323,8 @@ class Trainer(object):
                     ),
             ) in enumerate(trn_real_loader):
                 craft.train()
+                trn_real_loader.sampler.set_epoch(train_step)
+                valid_data_loader.sampler.set_epoch(train_step)
                 if train_step > 0 and train_step % self.config.train.lr_decay == 0:
                     update_lr_rate_step += 1
                     training_lr = self.adjust_learning_rate(
@@ -311,28 +338,6 @@ class Trainer(object):
                 region_scores = region_scores.cuda(non_blocking=True)
                 affinity_scores = affinity_scores.cuda(non_blocking=True)
                 confidence_masks = confidence_masks.cuda(non_blocking=True)
-
-                # print(f"img: {images.shape}")
-                # print(f"reg: {region_scores.shape}")
-                # print(f"aff: {affinity_scores.shape}")
-                # print(f"img[0]: {images[0].shape}")
-
-                # reg_min = region_scores.min()
-                # reg_max = region_scores.max()
-                # aff_min = affinity_scores.min()
-                # aff_max = affinity_scores.max()
-                # norm_reg = (region_scores - reg_min) / (reg_max - reg_min)
-                # norm_aff = (affinity_scores - aff_min) / (aff_max - aff_min)
-                # count = 0
-                # for image_, norm_aff_, norm_reg_ in zip(images, norm_aff, norm_reg):
-                #     img = image_.permute(1,2,0).cpu().numpy().astype(np.uint8)
-                #     img = Image.fromarray(img)
-                #     img_1 = Image.fromarray(norm_reg_.cpu().numpy(), mode = "L")
-                #     img_2 = Image.fromarray(norm_aff_.cpu().numpy(), mode = "L")
-                #     img.save(f'/home/EasyOCR/example_data/test_{train_step}_{count}.jpg')
-                #     img_1.save(f'/home/EasyOCR/example_data/test_{train_step}_{count}_1.jpg')
-                #     img_2.save(f'/home/EasyOCR/example_data/test_{train_step}_{count}_2.jpg')
-                #     count += 1
 
                 if self.config.train.use_synthtext:
                     # Synth image load
@@ -365,7 +370,7 @@ class Trainer(object):
                         out1 = output[:, :, :, 0]
                         out2 = output[:, :, :, 1]
                         
-                        if train_step % 40 == 0:
+                        if train_step % 500 == 0:
                             # print(images[0].squeeze().permute(1,2,0).cpu().numpy().shape)
                             img = Image.fromarray(images[0].permute(1,2,0).cpu().detach().numpy().astype(np.uint8))
                             reg_scaled = (cv2.resize(region_image_label[0].cpu().detach().numpy(), (768, 768), interpolation=cv2.INTER_LINEAR)*255).astype(np.uint8)
@@ -386,10 +391,6 @@ class Trainer(object):
                             cnf.save(os.path.join('/home/EasyOCR/example_data', f"{train_step}_confidence.jpg"))
                             ot1.save(os.path.join('/home/EasyOCR/example_data', f"{train_step}_output_reg.jpg"))
                             ot2.save(os.path.join('/home/EasyOCR/example_data', f"{train_step}_output_aff.jpg"))
-                        
-
-                        # print(f"out1 shape: {out1.shape}")
-                        # print(f"out2 shape: {out2.shape}")
 
                         loss = criterion(
                             region_image_label,
@@ -432,6 +433,7 @@ class Trainer(object):
                     loss_value = 0
                     avg_batch_time = batch_time / 5
                     batch_time = 0
+                    start_time = time.time()
 
                     print(
                         "{}, training_step: {}|{}, learning rate: {:.8f}, "
@@ -461,7 +463,7 @@ class Trainer(object):
                     print("Saving state, index:", train_step)
                     save_param_dic = {
                         "iter": train_step,
-                        "craft": craft.state_dict(),
+                        "craft": craft.module.state_dict(),
                         "optimizer": optimizer.state_dict(),
                     }
                     save_param_path = (
@@ -475,6 +477,8 @@ class Trainer(object):
                                 self.config.results_dir
                                 + "/CRAFT_clr_best.pt"
                         )
+                    
+                    torch.save(save_param_dic, self.config.results_dir+"/CRAFT_clr_last.pt")
 
                     # validation
                     for (index_val,(images, region_scores, affinity_scores, confidence_masks,),) in enumerate(valid_data_loader):
@@ -539,17 +543,17 @@ class Trainer(object):
                 trn_real_dataset.update_model(supervision_model)
 
             ea = self.early_stopper.early_stop(mean_val_loss, craft, index)
-            print(f"ITERATION: {train_step} -> TRAIN LOSS: {mean_loss:.7f} , MIN LOSS: {self.early_stopper.min_validation_loss:.7f} STEP {self.early_stopper.counter}")
+            # print(f"ITERATION: {train_step} -> TRAIN LOSS: {mean_loss:.7f} , MIN LOSS: {self.early_stopper.min_validation_loss:.7f} STEP {self.early_stopper.counter}")
             if ea:
                 torch.save(
-                    self.early_stopper.best_model.state_dict(), save_param_path)
+                    self.early_stopper.best_model.module.state_dict(), save_param_path)
                 print(f'end the training : early stop: {ea} MIN_LOSS: {self.early_stopper.min_validation_loss:.7f}')
                 sys.exit()
 
         # save last model
         save_param_dic = {
             "iter": train_step,
-            "craft": craft.state_dict(),
+            "craft": craft.module.state_dict(),
             "optimizer": optimizer.state_dict(),
         }
         save_param_path = (
@@ -567,10 +571,10 @@ class Trainer(object):
         torch.save(save_param_dic, save_param_path)
         if self.config.tensorboard:
             self.writer.flush()
+        destroy_process_group()
 
 
 def main():
-    # mp.set_start_method('spawn')
     parser = argparse.ArgumentParser(description="CRAFT custom data train")
     parser.add_argument(
         "--yaml",
@@ -619,8 +623,10 @@ def main():
 
     # Start train
     buffer_dict = {"custom_data":None}
-    trainer = Trainer(config, 0, mode)
-    trainer.train(buffer_dict)
+
+    trainer = Trainer(config, mode)
+    world_size = torch.cuda.device_count()
+    mp.spawn(trainer.train, args=(world_size, buffer_dict,), nprocs=world_size)
 
     if config["wandb_opt"]:
         wandb.finish()
