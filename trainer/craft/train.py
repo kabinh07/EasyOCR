@@ -12,6 +12,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import wandb
+import pickle
 
 import torch.multiprocessing as mp
 
@@ -32,6 +33,10 @@ import torch.multiprocessing as mp
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
+import pickle
+
+# mp.Queue().get_nowait()
+
 
 def ddp_setup(rank: int, world_size: int):
    """
@@ -67,10 +72,9 @@ class EarlyStopper:
 class Trainer(object):
     def __init__(self, config, mode):
         self.config = config
-        if self.config.tensorboard:
-            self.writer = SummaryWriter()
         self.mode = mode
         self.early_stopper = EarlyStopper(patience=int(self.config.train.patience) if self.config.train.patience else 5)
+        self.gpu = None
 
     def get_synth_loader(self):
 
@@ -160,7 +164,7 @@ class Trainer(object):
             raise Exception("Undefined loss")
         return criterion
 
-    def iou_eval(self, dataset, train_step, buffer, model):
+    def iou_eval(self, rank, dataset, train_step, buffer, model):
         test_config = DotDict(self.config.test[dataset])
 
         val_result_dir = os.path.join(
@@ -179,27 +183,30 @@ class Trainer(object):
             model,
             self.mode,
         )
-        if self.config.tensorboard:    
+        if rank == 0 and self.config.tensorboard:    
             self.writer.add_scalar("Evaluation precision", np.round(metrics['precision'], 3), train_step)
             self.writer.add_scalar("Evaluation recall", np.round(metrics['recall'], 3), train_step)
             self.writer.add_scalar("Evaluation hmean", np.round(metrics['hmean'], 3), train_step)
 
-        if self.gpu == 0 and self.config.wandb_opt:
-            wandb.log(
-                {
-                    "{} iou Recall".format(dataset): np.round(metrics["recall"], 3),
-                    "{} iou Precision".format(dataset): np.round(
-                        metrics["precision"], 3
-                    ),
-                    "{} iou F1-score".format(dataset): np.round(metrics["hmean"], 3),
-                }
-            )
+        # if self.config.wandb_opt:
+        #     wandb.log(
+        #         {
+        #             "{} iou Recall".format(dataset): np.round(metrics["recall"], 3),
+        #             "{} iou Precision".format(dataset): np.round(
+        #                 metrics["precision"], 3
+        #             ),
+        #             "{} iou F1-score".format(dataset): np.round(metrics["hmean"], 3),
+        #         }
+        #     )
 
     def train(self, rank, world_size, buffer_dict):
         ddp_setup(rank, world_size)
+        if rank == 0 and self.config.tensorboard:
+            self.writer = SummaryWriter()
         # MODEL -------------------------------------------------------------------------------------------------------#
         # SUPERVISION model
         supervision_device = rank
+        print(f"Rank: {rank}")
         supervision_param = self.get_load_param(supervision_device)
 
 
@@ -247,10 +254,10 @@ class Trainer(object):
 
         if self.config.mode == "weak_supervision":
             trn_real_dataset.update_model(supervision_model)
-            trn_real_dataset.update_device(supervision_device)
+            trn_real_dataset.update_device(rank)
 
             valid_dataset.update_model(supervision_model)
-            valid_dataset.update_device(supervision_device)
+            valid_dataset.update_device(rank)
 
         trn_real_loader = torch.utils.data.DataLoader(
             trn_real_dataset,
@@ -425,7 +432,10 @@ class Trainer(object):
                     optimizer.step()
 
                 end_time = time.time()
-                loss_value += loss.item()
+                loss_tensor = torch.tensor(loss.item(), device=images.device)
+                torch.distributed.all_reduce(loss_tensor, op=torch.distributed.ReduceOp.SUM)
+                avg_loss = loss_tensor.item() / torch.distributed.get_world_size()
+                loss_value += avg_loss
                 batch_time += end_time - start_time
 
                 if train_step > 0 and train_step % 5 == 0:
@@ -448,10 +458,10 @@ class Trainer(object):
                             avg_batch_time,
                         )
                     )
-                    if self.config.tensorboard:
+                    if rank == 0 and self.config.tensorboard:
                         self.writer.add_scalar("Training loss", mean_loss, train_step)
-                    if self.config.wandb_opt:
-                        wandb.log({"train_step": train_step, "mean_loss": mean_loss})
+                    # if self.config.wandb_opt:
+                    #     wandb.log({"train_step": train_step, "mean_loss": mean_loss})
 
                 if (
                         train_step % self.config.train.eval_interval == 0
@@ -459,26 +469,29 @@ class Trainer(object):
                 ):
 
                     craft.eval()
+                    save_param_dic = {}
+                    save_param_path = None
 
-                    print("Saving state, index:", train_step)
-                    save_param_dic = {
-                        "iter": train_step,
-                        "craft": craft.module.state_dict(),
-                        "optimizer": optimizer.state_dict(),
-                    }
-                    save_param_path = (
-                            self.config.results_dir
-                            + "/CRAFT_clr_best.pt"
-                    )
-
-                    if self.config.train.amp:
-                        save_param_dic["scaler"] = scaler.state_dict()
+                    if rank == 0:
+                        print("Saving state, index:", train_step)
+                        save_param_dic = {
+                            "iter": train_step,
+                            "craft": craft.module.state_dict(),
+                            "optimizer": optimizer.state_dict(),
+                        }
                         save_param_path = (
                                 self.config.results_dir
                                 + "/CRAFT_clr_best.pt"
                         )
+
+                        if self.config.train.amp:
+                            save_param_dic["scaler"] = scaler.state_dict()
+                            save_param_path = (
+                                    self.config.results_dir
+                                    + "/CRAFT_clr_best.pt"
+                            )
                     
-                    torch.save(save_param_dic, self.config.results_dir+"/CRAFT_clr_last.pt")
+                        torch.save(save_param_dic, self.config.results_dir+"/CRAFT_clr_last.pt")
 
                     # validation
                     for (index_val,(images, region_scores, affinity_scores, confidence_masks,),) in enumerate(valid_data_loader):
@@ -514,19 +527,24 @@ class Trainer(object):
                                     self.config.train.n_min_neg,
                                 )
                             optimizer.zero_grad()
-                        val_loss += loss.item()
+                        val_loss_tensor = torch.tensor(loss.item(), device=images.device)
+                        torch.distributed.all_reduce(val_loss_tensor, op=torch.distributed.ReduceOp.SUM)
+                        avg_val_loss = val_loss_tensor.item() / torch.distributed.get_world_size()
+                        val_loss += avg_val_loss
                     mean_val_loss = val_loss/len(valid_data_loader)
-                    if self.config.tensorboard:
+                    if rank == 0 and self.config.tensorboard:
                         self.writer.add_scalar("Validation loss", mean_val_loss , train_step)
                     # if index == self.config.eval_interval:
                     #     best_val_loss = mean_val_loss
                     #     torch.save(save_param_dic, save_param_path)
                     if mean_val_loss < best_val_loss:
                         best_val_loss = mean_val_loss
-                        torch.save(save_param_dic, save_param_path)
+                        if rank == 0:
+                            torch.save(save_param_dic, save_param_path)
                     val_loss = 0
 
                     self.iou_eval(
+                        rank,
                         "custom_data",
                         train_step,
                         buffer_dict["custom_data"],
@@ -568,11 +586,12 @@ class Trainer(object):
                     + repr(train_step)
                     + ".pth"
             )
-        torch.save(save_param_dic, save_param_path)
-        if self.config.tensorboard:
+        if rank == 0:
+            torch.save(save_param_dic, save_param_path)
+        if rank == 0 and self.config.tensorboard:
             self.writer.flush()
+            self.writer.close()
         destroy_process_group()
-
 
 def main():
     parser = argparse.ArgumentParser(description="CRAFT custom data train")
@@ -615,25 +634,30 @@ def main():
 
 
     # Apply config to wandb
-    if config["wandb_opt"]:
-        wandb.init(project="craft-stage2", entity="user_name", name=exp_name)
-        wandb.config.update(config)
+    # if config["wandb_opt"]:
+    #     wandb.init(project="craft-stage2", entity="user_name", name=exp_name)
+    #     wandb.config.update(config)
 
     config = DotDict(config)
 
     # Start train
     buffer_dict = {"custom_data":None}
-
     trainer = Trainer(config, mode)
+    torch.cuda.empty_cache()
     world_size = torch.cuda.device_count()
-    mp.spawn(trainer.train, args=(world_size, buffer_dict,), nprocs=world_size)
-
-    if config["wandb_opt"]:
-        wandb.finish()
-    if config["tensorboard"]:
-        trainer.writer.close()
+    print(f"Device count: {world_size}")
+    try:
+        mp.spawn(trainer.train, args=(world_size, buffer_dict), nprocs=world_size)
+    except KeyboardInterrupt:
+        destroy_process_group()
+    except Exception as e:
+        print(f"Error while starting training loop: {e}")
+        
+    # if config["wandb_opt"]:
+    #     wandb.finish()
     sys.exit()
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
     main()

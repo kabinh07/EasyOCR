@@ -1,0 +1,16 @@
+train:
+  loss: 3
+  neg_rto:
+  n_min_neg:
+  lr: 1e-3
+  weight_decay: 1e-4
+  data:
+  batch_size:
+  num_workers:
+  patience: 10
+  epochs: 10000
+  gpus: 4
+valid:
+  data:
+  batch_size:
+  num_workers:

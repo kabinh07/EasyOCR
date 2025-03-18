@@ -28,9 +28,9 @@ def copyStateDict(state_dict):
 
 def test_net(canvas_size, mag_ratio, net, image, text_threshold, link_threshold, low_text, poly, device, estimate_num_chars=False):
     global index_image
-    low_text = 0.25
-    text_threshold = 0.1
-    link_threshold = 0.9
+    low_text = 0.4
+    text_threshold = 0.5
+    link_threshold = 0.5
     print(f"printing from detection.py | low_text: {low_text}")
     print(f"printing from detection.py | text_threshold: {text_threshold}")
     print(f"printing from detection.py | link_threshold: {link_threshold}")
@@ -73,10 +73,10 @@ def test_net(canvas_size, mag_ratio, net, image, text_threshold, link_threshold,
     x = torch.from_numpy(np.array(x))
     x = x.to(device)
 
-    if not os.path.exists('/home/EasyOCR/trainer/craft/exp/custom_data_train/CRAFT_clr_best_jit.pth'):
-        # print(net.state_dict().keys())
-        traced_model = torch.jit.trace(net.module, x)
-        torch.jit.save(traced_model, '/home/EasyOCR/trainer/craft/exp/custom_data_train/CRAFT_clr_best_jit.pth')
+    # if not os.path.exists('/home/EasyOCR/trainer/craft/exp/custom_data_train_v3_2/CRAFT_clr_best_jit.pth'):
+    #     # print(net.state_dict().keys())
+    #     traced_model = torch.jit.trace(net.module, x)
+    #     torch.jit.save(traced_model, '/home/EasyOCR/trainer/craft/exp/custom_data_train_v3_2/CRAFT_clr_best_jit.pth')
 
     # forward pass
     with torch.no_grad():
@@ -125,11 +125,11 @@ def test_net(canvas_size, mag_ratio, net, image, text_threshold, link_threshold,
 def get_detector(trained_model, device='cpu', quantize=True, cudnn_benchmark=False):
     net = CRAFT()
 
-    trained_model = '/home/EasyOCR/trainer/craft/exp/custom_data_train/CRAFT_clr_best_jit.pth'
+    trained_model = '/home/EasyOCR/trainer/craft/exp/custom_data_train_v3_2/CRAFT_clr_best.pt'
 
     if device == 'cpu':
         print(f"Loading state dict on CPU from: {trained_model}")
-        net.load_state_dict(copyStateDict(torch.load(trained_model, map_location=device, weights_only=False)))
+        net.load_state_dict(copyStateDict(torch.load(trained_model, map_location=device, weights_only=False)['craft']))
         if quantize:
             try:
                 torch.quantization.quantize_dynamic(net, dtype=torch.qint8, inplace=True)
@@ -137,9 +137,9 @@ def get_detector(trained_model, device='cpu', quantize=True, cudnn_benchmark=Fal
                 pass
     else:
         print(f"Loading state dict on GPU from: {trained_model}")
-        # net.load_state_dict(copyStateDict(torch.load(trained_model, map_location=device, weights_only=False)))
-        # net = torch.nn.DataParallel(net).to(device)
-        net = torch.jit.load(str(trained_model), map_location=device)
+        net.load_state_dict(copyStateDict(torch.load(trained_model, map_location=device, weights_only=False)))
+        net = torch.nn.DataParallel(net).to(device)
+        # net = torch.jit.load(str(trained_model), map_location=device)
         cudnn.benchmark = cudnn_benchmark
 
     net.eval()

@@ -269,7 +269,6 @@ class Reader(object):
             raise RuntimeError("Unsupport detector network. Support networks are {}.".format(', '.join(self.support_detection_network)))
         
         return detector_path
-        # return "/home/EasyOCR/trainer/craft/exp/custom_data_train/craft_test.pth"
 
     def initDetector(self, detector_path):
         return self.get_detector(detector_path, 
@@ -348,8 +347,8 @@ class Reader(object):
                     i[1] - i[0], i[3] - i[2]) > min_size]
                 free_list = [i for i in free_list if max(
                     diff([c[0] for c in i]), diff([c[1] for c in i])) > min_size]
-            horizontal_list = [self.__add_padding(box, 1, 3) for box in horizontal_list]
-            free_list = [self.__add_padding(box, 1, 3) for box in free_list]
+            horizontal_list = [self.__add_padding(box, 1, 1) for box in horizontal_list]
+            free_list = [self.__add_padding(box, 1, 1) for box in free_list]
             horizontal_list_agg.append(horizontal_list)
             free_list_agg.append(free_list)
 
